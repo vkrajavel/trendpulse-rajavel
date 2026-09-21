@@ -1,4 +1,4 @@
-"""Task 1: Collect live trending data from the Hacker News API (no API key needed)."""
+Task 1: Collect live trending data from the Hacker News API (no API key needed)."""
 import os
 from concurrent.futures import ThreadPoolExecutor
 
