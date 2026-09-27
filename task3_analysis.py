@@ -1,4 +1,3 @@
-"""Task 3: Analyse the cleaned trending data."""
 import json
 import re
 from collections import Counter
