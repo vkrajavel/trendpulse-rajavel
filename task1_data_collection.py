@@ -4,17 +4,15 @@ import json
 import os
 from datetime import datetime
 
-# Hacker News API URLs
+# HackerNews API URLs
 TOP_STORIES_URL = "https://hacker-news.firebaseio.com/v0/topstories.json"
 ITEM_URL = "https://hacker-news.firebaseio.com/v0/item/{}.json"
 
-# Required User-Agent header
-HEADERS = {
-    "User-Agent": "TrendPulse/1.0"
-}
+# Identify our script to the API
+headers = {"User-Agent": "TrendPulse/1.0"}
 
-# Keywords used to classify stories
-CATEGORY_KEYWORDS = {
+# Keywords used to assign stories to categories
+categories = {
     "technology": [
         "AI", "software", "tech", "code", "computer",
         "data", "cloud", "API", "GPU", "LLM"
@@ -37,134 +35,97 @@ CATEGORY_KEYWORDS = {
     ]
 }
 
-
-def get_category(title):
-    """
-    Check the title against each category's keywords.
-    Matching is case-insensitive.
-    """
-    title_lower = title.lower()
-
-    for category, keywords in CATEGORY_KEYWORDS.items():
-        for keyword in keywords:
-            if keyword.lower() in title_lower:
-                return category
-
-    return None
-
-
-# ---------------------------------------------------------
-# Step 1: Get the top 500 Hacker News story IDs
-# ---------------------------------------------------------
-
+# Step 1: Fetch the top 500 story IDs
 try:
     response = requests.get(
         TOP_STORIES_URL,
-        headers=HEADERS,
+        headers=headers,
         timeout=10
     )
     response.raise_for_status()
-
     story_ids = response.json()[:500]
+except requests.RequestException as e:
+    print(f"Failed to fetch top stories: {e}")
+    story_ids = []
 
-    print(f"Fetched {len(story_ids)} top story IDs.")
-
-except requests.RequestException as error:
-    print(f"Failed to fetch top stories: {error}")
-    exit()
-
-
-# ---------------------------------------------------------
-# Step 2: Fetch the details of each story
-# ---------------------------------------------------------
-
+# Fetch details for each story
 stories = []
 
 for story_id in story_ids:
     try:
         response = requests.get(
             ITEM_URL.format(story_id),
-            headers=HEADERS,
+            headers=headers,
             timeout=10
         )
-
         response.raise_for_status()
+
         story = response.json()
 
-        # Ignore deleted/dead stories or stories without titles
-        if not story or story.get("type") != "story":
-            continue
+        # Only process stories that have a title
+        if story and story.get("title"):
+            stories.append(story)
 
-        if not story.get("title"):
-            continue
-
-        category = get_category(story["title"])
-
-        # Only keep stories that match one of our categories
-        if category is None:
-            continue
-
-        # Store the seven fields required by the assignment
-        cleaned_story = {
-            "post_id": story.get("id"),
-            "title": story.get("title"),
-            "category": category,
-            "score": story.get("score", 0),
-            "num_comments": story.get("descendants", 0),
-            "author": story.get("by"),
-            "collected_at": datetime.now().isoformat()
-        }
-
-        stories.append(cleaned_story)
-
-    except requests.RequestException as error:
-        # If one story fails, continue with the remaining stories
-        print(f"Failed to fetch story {story_id}: {error}")
+    except requests.RequestException as e:
+        print(f"Failed to fetch story {story_id}: {e}")
         continue
 
+# Step 2: Assign stories to categories
+collected_stories = []
+used_story_ids = set()
 
-# ---------------------------------------------------------
-# Step 3: Keep maximum 25 stories in each category
-# ---------------------------------------------------------
+for category, keywords in categories.items():
 
-selected_stories = []
+    category_count = 0
 
-for category in CATEGORY_KEYWORDS:
-    category_stories = [
-        story for story in stories
-        if story["category"] == category
-    ]
+    for story in stories:
 
-    # Keep no more than 25 stories for this category
-    selected_stories.extend(category_stories[:25])
+        # Stop after collecting 25 stories for this category
+        if category_count >= 25:
+            break
 
-    print(
-        f"{category}: "
-        f"{len(category_stories[:25])} stories selected"
-    )
+        story_id = story.get("id")
+
+        # Do not use the same story in multiple categories
+        if story_id in used_story_ids:
+            continue
+
+        title = story.get("title", "")
+        title_lower = title.lower()
+
+        # Check whether the title contains a category keyword
+        if any(keyword.lower() in title_lower for keyword in keywords):
+
+            collected_stories.append({
+                "post_id": story_id,
+                "title": title,
+                "category": category,
+                "score": story.get("score", 0),
+                "num_comments": story.get("descendants", 0),
+                "author": story.get("by", ""),
+                "collected_at": datetime.now().isoformat()
+            })
+
+            used_story_ids.add(story_id)
+            category_count += 1
 
     # Wait 2 seconds between category loops
-    time.sleep(2)
+    if category != list(categories.keys())[-1]:
+        time.sleep(2)
 
-
-# ---------------------------------------------------------
-# Step 4: Create the data folder if it doesn't exist
-# ---------------------------------------------------------
-
+# Step 3: Create the data folder if it does not exist
 os.makedirs("data", exist_ok=True)
 
+# Create filename using today's date
+date_string = datetime.now().strftime("%Y%m%d")
+filename = f"data/trends_{date_string}.json"
 
-# ---------------------------------------------------------
-# Step 5: Save the collected stories as JSON
-# ---------------------------------------------------------
+# Save collected stories to JSON
+with open(filename, "w", encoding="utf-8") as file:
+    json.dump(collected_stories, file, indent=2, ensure_ascii=False)
 
-output_file = "data/trends_20240115.json"
-
-with open(output_file, "w", encoding="utf-8") as file:
-    json.dump(selected_stories, file, indent=4, ensure_ascii=False)
-
-
+# Print the final result
 print(
-    f"\nCollected {len(selected_stories)} stories. "
-    f"Saved to {output_file}"
+    f"Collected {len(collected_stories)} stories. "
+    f"Saved to {filename}"
 )
