@@ -1,71 +1,147 @@
-"""Task 4: Visualise the trending data."""
-import json
+import pandas as pd
+import matplotlib.pyplot as plt
 import os
 
-import matplotlib
-matplotlib.use("Agg")  # works without a display
-import matplotlib.pyplot as plt
-import pandas as pd
+# Load the analysed data
+df = pd.read_csv("data/trends_analysed.csv")
 
-DATA_FILE = "data/clean_data.csv"
-RESULTS_FILE = "data/analysis_results.json"
-OUTPUT_DIR = "charts"
+# Create the output folder if it does not exist
+os.makedirs("outputs", exist_ok=True)
 
+# -------------------------------
+# Chart 1: Top 10 Stories by Score
+# -------------------------------
 
-def shorten(text, n=40):
-    return text if len(text) <= n else text[: n - 3] + "..."
+top_stories = df.nlargest(10, "score").copy()
 
+# Shorten long titles for the chart
+top_stories["short_title"] = top_stories["title"].apply(
+    lambda title: title[:50] + "..." if len(title) > 50 else title
+)
 
-def main():
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-    df = pd.read_csv(DATA_FILE)
-    with open(RESULTS_FILE) as f:
-        results = json.load(f)
+plt.figure(figsize=(10, 6))
+plt.barh(top_stories["short_title"], top_stories["score"])
+plt.xlabel("Score")
+plt.ylabel("Story Title")
+plt.title("Top 10 Stories by Score")
+plt.gca().invert_yaxis()
+plt.tight_layout()
 
-    # 1. Top 10 stories by score
-    top = pd.DataFrame(results["top_stories"])
-    plt.figure(figsize=(10, 6))
-    plt.barh([shorten(t) for t in top["title"]][::-1], top["score"][::-1], color="#4c72b0")
-    plt.xlabel("Score")
-    plt.title("Top 10 Trending Stories by Score")
-    plt.tight_layout()
-    plt.savefig(f"{OUTPUT_DIR}/top_stories.png", dpi=150)
-    plt.close()
-
-    # 2. Top domains
-    domains = results["top_domains"]
-    plt.figure(figsize=(10, 6))
-    plt.bar(domains.keys(), domains.values(), color="#55a868")
-    plt.xticks(rotation=45, ha="right")
-    plt.ylabel("Number of stories")
-    plt.title("Most Frequent Domains")
-    plt.tight_layout()
-    plt.savefig(f"{OUTPUT_DIR}/top_domains.png", dpi=150)
-    plt.close()
-
-    # 3. Score vs comments
-    plt.figure(figsize=(8, 6))
-    plt.scatter(df["score"], df["comments"], alpha=0.6, color="#c44e52")
-    plt.xlabel("Score")
-    plt.ylabel("Comments")
-    plt.title("Score vs Comments")
-    plt.tight_layout()
-    plt.savefig(f"{OUTPUT_DIR}/score_vs_comments.png", dpi=150)
-    plt.close()
-
-    # 4. Top keywords
-    kw = results["top_keywords"]
-    plt.figure(figsize=(10, 6))
-    plt.bar(kw.keys(), kw.values(), color="#8172b2")
-    plt.xticks(rotation=45, ha="right")
-    plt.ylabel("Frequency")
-    plt.title("Most Common Keywords in Titles")
-    plt.tight_layout()
-    plt.savefig(f"{OUTPUT_DIR}/top_keywords.png", dpi=150)
-    plt.close()
-
-    print(f"Saved 4 charts to {OUTPUT_DIR}/")
+plt.savefig("outputs/chart1_top_stories.png")
+plt.show()
+plt.close()
 
 
-if __name__ == "__main__":
-    main()
+# --------------------------------
+# Chart 2: Stories per Category
+# --------------------------------
+
+category_counts = df["category"].value_counts()
+
+plt.figure(figsize=(8, 5))
+
+# Use a different colour for each bar
+plt.bar(
+    category_counts.index,
+    category_counts.values,
+    color=["skyblue", "orange", "green", "red", "purple"]
+)
+
+plt.xlabel("Category")
+plt.ylabel("Number of Stories")
+plt.title("Stories per Category")
+plt.xticks(rotation=20)
+plt.tight_layout()
+
+plt.savefig("outputs/chart2_categories.png")
+plt.show()
+plt.close()
+
+
+# --------------------------------
+# Chart 3: Score vs Comments
+# --------------------------------
+
+plt.figure(figsize=(8, 6))
+
+popular = df[df["is_popular"] == True]
+not_popular = df[df["is_popular"] == False]
+
+plt.scatter(
+    popular["score"],
+    popular["num_comments"],
+    label="Popular"
+)
+
+plt.scatter(
+    not_popular["score"],
+    not_popular["num_comments"],
+    label="Not Popular"
+)
+
+plt.xlabel("Score")
+plt.ylabel("Number of Comments")
+plt.title("Score vs Comments")
+plt.legend()
+plt.tight_layout()
+
+plt.savefig("outputs/chart3_scatter.png")
+plt.show()
+plt.close()
+
+
+# --------------------------------
+# Bonus: TrendPulse Dashboard
+# --------------------------------
+
+fig, axes = plt.subplots(2, 2, figsize=(16, 10))
+
+# Dashboard Chart 1
+axes[0, 0].barh(
+    top_stories["short_title"],
+    top_stories["score"]
+)
+axes[0, 0].set_title("Top 10 Stories by Score")
+axes[0, 0].set_xlabel("Score")
+axes[0, 0].set_ylabel("Story Title")
+axes[0, 0].invert_yaxis()
+
+# Dashboard Chart 2
+axes[0, 1].bar(
+    category_counts.index,
+    category_counts.values,
+    color=["skyblue", "orange", "green", "red", "purple"]
+)
+axes[0, 1].set_title("Stories per Category")
+axes[0, 1].set_xlabel("Category")
+axes[0, 1].set_ylabel("Number of Stories")
+axes[0, 1].tick_params(axis="x", rotation=20)
+
+# Dashboard Chart 3
+axes[1, 0].scatter(
+    popular["score"],
+    popular["num_comments"],
+    label="Popular"
+)
+axes[1, 0].scatter(
+    not_popular["score"],
+    not_popular["num_comments"],
+    label="Not Popular"
+)
+axes[1, 0].set_title("Score vs Comments")
+axes[1, 0].set_xlabel("Score")
+axes[1, 0].set_ylabel("Number of Comments")
+axes[1, 0].legend()
+
+# Leave the fourth area empty
+axes[1, 1].axis("off")
+
+# Overall dashboard title
+fig.suptitle("TrendPulse Dashboard", fontsize=18)
+
+plt.tight_layout()
+plt.savefig("outputs/dashboard.png")
+plt.show()
+plt.close()
+
+print("\nAll charts saved successfully in the outputs folder.")
